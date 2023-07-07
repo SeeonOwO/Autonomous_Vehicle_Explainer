@@ -76,6 +76,7 @@ def edl_mse_loss(output, target, epoch_num, num_classes, annealing_step, device=
     loss = torch.mean(mse_result)
     return loss
 
+
 def edl_loss(func, y, alpha, epoch_num, num_classes, annealing_step, device=None):
     y = y.to(device)
     alpha = alpha.to(device)
@@ -92,8 +93,9 @@ def edl_loss(func, y, alpha, epoch_num, num_classes, annealing_step, device=None
     kl_div = annealing_coef * kl_divergence(kl_alpha, num_classes, device=device)
     return A + kl_div
 
+
 def edl_digamma_loss(
-    output, target, epoch_num, num_classes, annealing_step, device=None
+        output, target, epoch_num, num_classes, annealing_step, device=None
 ):
     if not device:
         device = get_device()
@@ -105,6 +107,23 @@ def edl_digamma_loss(
         )
     )
     return loss
+
+
+def edl_weighted_digamma_loss(output, target, epoch_num, num_classes, annealing_step, device=None,
+                              weights=None):
+    if not device:
+        device = get_device()
+    weights = weights.to(device)
+    evidence = relu_evidence(output)
+    alpha = evidence + 1
+    losses = edl_loss(
+        torch.digamma, target, alpha, epoch_num, num_classes, annealing_step, device
+    )
+    weights = weights / torch.sum(weights)
+    weights = weights.reshape(-1, 1)
+    loss = torch.sum(losses * weights)
+    return loss
+
 
 def one_hot_embedding(labels, num_classes=2):
     # Convert to One Hot Encoding
