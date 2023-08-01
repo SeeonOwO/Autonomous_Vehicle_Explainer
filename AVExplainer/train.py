@@ -41,11 +41,17 @@ def main():
     with open('C:/Users/lsion/Desktop/lastframe/gt_4a_21r_val.json', 'r') as f:
         val_annotations = json.load(f)
 
+    with open('C:/Users/lsion/Desktop/lastframe/gt_4a_21r_test.json', 'r') as f:
+        test_annotations = json.load(f)
+
     train_dataset = CustomDataset('C:/Users/lsion/Desktop/lastframe/train', train_annotations)
     val_dataset = CustomDataset('C:/Users/lsion/Desktop/lastframe/validate', val_annotations)
 
     train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False, num_workers=4)
+
+    test_dataset = CustomDataset('C:/Users/lsion/Desktop/lastframe/test', test_annotations)
+    test_loader = DataLoader(test_dataset, batch_size=4, shuffle=False, num_workers=4)
 
     num_actions = 4
     num_reasons = 21
@@ -53,25 +59,32 @@ def main():
     # explanation_model.load_state_dict(torch.load('edl_sep_base_model.pth'))
 
     '''
-    pretrained_dict = torch.load('edl_sep_base_model.pth')
+    pretrained_dict = torch.load('test_ori_model.pth')
     # Extract the state dictionary of the selector and fc1
     selector_dict = {k: v for k, v in pretrained_dict.items() if 'selector' in k and 'selector_' not in k}
     selector_dict = {k.replace('selector.', ''): v for k, v in selector_dict.items()}
-    fc1_dict = {k: v for k, v in pretrained_dict.items() if k.startswith('fc1.')}
-    fc1_dict = {k.replace('fc1.', ''): v for k, v in fc1_dict.items()}
-
+    # fc1_dict = {k: v for k, v in pretrained_dict.items() if k.startswith('fc1.')}
+    # fc1_dict = {k.replace('fc1.', ''): v for k, v in fc1_dict.items()}
+    fcr_dict = {k: v for k, v in pretrained_dict.items() if 'fcr_edl' in k and 'fcr_edl_' not in k}
+    fcr_dict = {k.replace('fcr_edl.', ''): v for k, v in fcr_dict.items()}
     # Initialize the selectors with the pretrained weights
     explanation_model.selector_1.load_state_dict(selector_dict)
     explanation_model.selector_2.load_state_dict(selector_dict)
     explanation_model.selector_3.load_state_dict(selector_dict)
     explanation_model.selector_4.load_state_dict(selector_dict)
-    explanation_model.fc1_1.load_state_dict(fc1_dict)
-    explanation_model.fc1_2.load_state_dict(fc1_dict)
-    explanation_model.fc1_3.load_state_dict(fc1_dict)
-    explanation_model.fc1_4.load_state_dict(fc1_dict)
+    explanation_model.fcr_edl_1.load_state_dict(fcr_dict)
+    explanation_model.fcr_edl_2.load_state_dict(fcr_dict)
+    explanation_model.fcr_edl_3.load_state_dict(fcr_dict)
+    explanation_model.fcr_edl_4.load_state_dict(fcr_dict)
+    explanation_model.fcr_edl_5.load_state_dict(fcr_dict)
+    explanation_model.fcr_edl_6.load_state_dict(fcr_dict)
+    # explanation_model.fc1_1.load_state_dict(fc1_dict)
+    # explanation_model.fc1_2.load_state_dict(fc1_dict)
+    # explanation_model.fc1_3.load_state_dict(fc1_dict)
+    # explanation_model.fc1_4.load_state_dict(fc1_dict)
 
     # Get the rest of the parameters
-    rest_dict = {k: v for k, v in pretrained_dict.items() if 'selector' not in k and 'fc1' not in k}
+    rest_dict = {k: v for k, v in pretrained_dict.items() if 'selector' not in k and 'fcr_edl' not in k}
     # rest_dict = {k: v for k, v in pretrained_dict.items() if 'selector' not in k}
     # Get the current state dict of the new model
     model_dict = explanation_model.state_dict()
@@ -92,7 +105,7 @@ def main():
     criterion = nn.BCEWithLogitsLoss()
 
     # Define the loss function: weighted BCE
-    class_weights = [1, 1, 1, 1]
+    class_weights = [1, 1, 2, 2]
     w = torch.FloatTensor(class_weights).cuda()
     criterion_w = nn.BCEWithLogitsLoss(pos_weight=w).cuda()
 
@@ -101,7 +114,7 @@ def main():
     criterion_weighted_edl = edl_weighted_digamma_loss
 
     # Create an optimizer (base lr 0.001)
-    optimizer = optim.Adam(explanation_model.parameters(), lr=0.00001)
+    optimizer = optim.Adam(explanation_model.parameters(), lr=0.001, weight_decay=0.01)
     scheduler = StepLR(optimizer, step_size=10, gamma=0.1)
 
     # Determine the number of epochs
@@ -138,7 +151,7 @@ def main():
                             "selector_3.0.weight", "selector_3.0.bias", "selector_3.2.weight", "selector_3.2.bias",
                             "selector_3.4.weight", "selector_3.4.bias",
                             "selector_4.0.weight", "selector_4.0.bias", "selector_4.2.weight", "selector_4.2.bias",
-                            "selector_4.4.weight", "selector_4.4.bias"
+                            "selector_4.4.weight", "selector_4.4.bias"      
                             ]:
                     param.requires_grad = True
                 
@@ -170,7 +183,7 @@ def main():
                 # weights = torch.ones(len(actions_pred_result))
                 actions_weights = torch.ones(num_actions, len(actions_pred_result))
 
-                if epoch == 0:
+                if (epoch - 50) % 10 == 0:
                     for i in range(len(actions_pred_result)):
                         single_image_pred = actions_pred[i]
                         single_image_pred_result = actions_pred_result[i]
@@ -187,37 +200,37 @@ def main():
 
                             if single_image_pred_result[a].eq(actions_gt[i][a].bool()):
                                 if a == 0:
-                                    if single_image_uncertainty[a] > 0.579:
-                                        actions_weights[a][i] = 1.0
+                                    if single_image_uncertainty[a] > 0.226:
+                                        actions_weights[a][i] = 1.25
                                     weights_dict_1[image_names[i]] = actions_weights[a][i]
                                 elif a == 1:
-                                    if single_image_uncertainty[a] > 0.554:
-                                        actions_weights[a][i] = 1.0
+                                    if single_image_uncertainty[a] > 0.171:
+                                        actions_weights[a][i] = 1.25
                                     weights_dict_2[image_names[i]] = actions_weights[a][i]
                                 elif a == 2:
-                                    if single_image_uncertainty[a] > 0.53:
-                                        actions_weights[a][i] = 1.0
+                                    if single_image_uncertainty[a] > 0.505:
+                                        actions_weights[a][i] = 1.25
                                     weights_dict_3[image_names[i]] = actions_weights[a][i]
                                 else:
-                                    if single_image_uncertainty[a] > 0.695:
-                                        actions_weights[a][i] = 1.0
+                                    if single_image_uncertainty[a] > 0.561:
+                                        actions_weights[a][i] = 1.25
                                     weights_dict_4[image_names[i]] = actions_weights[a][i]
                             else:
                                 if a == 0:
-                                    if single_image_entropy[a] < 0.874:
-                                        actions_weights[a][i] = 1.0
+                                    if single_image_entropy[a] < 0.508:
+                                        actions_weights[a][i] = 1.5
                                     weights_dict_1[image_names[i]] = actions_weights[a][i]
                                 elif a == 1:
-                                    if single_image_entropy[a] < 0.851:
-                                        actions_weights[a][i] = 1.0
+                                    if single_image_entropy[a] < 0.421:
+                                        actions_weights[a][i] = 1.5
                                     weights_dict_2[image_names[i]] = actions_weights[a][i]
                                 elif a == 2:
-                                    if single_image_entropy[a] < 0.834:
-                                        actions_weights[a][i] = 1.0
+                                    if single_image_entropy[a] < 0.815:
+                                        actions_weights[a][i] = 1.5
                                     weights_dict_3[image_names[i]] = actions_weights[a][i]
                                 else:
-                                    if single_image_entropy[a] < 0.931:
-                                        actions_weights[a][i] = 1.0
+                                    if single_image_entropy[a] < 0.856:
+                                        actions_weights[a][i] = 1.5
                                     weights_dict_4[image_names[i]] = actions_weights[a][i]
                 else:
                     for i in range(num_actions):
@@ -265,7 +278,7 @@ def main():
                 loss_actions = criterion_w(actions_pred, actions_gt)
                 loss_reasons = criterion(reasons_pred, reasons_gt)
 
-            loss = loss_actions   + loss_reasons
+            loss = loss_actions + loss_reasons
 
             # Add regularization term to loss
             '''
@@ -300,6 +313,9 @@ def main():
             print(f"Training Entropy for action 3: ", torch.stack(train_entropy[2::4]).mean().item())
             print(f"Training Entropy for action 4: ", torch.stack(train_entropy[3::4]).mean().item())
         '''
+
+        #model_name = "test_update_sep_epoch_" + str(epoch) + ".pth"
+        #torch.save(explanation_model.state_dict(), model_name)
         # Validate
         explanation_model.eval()
 
@@ -440,6 +456,8 @@ def main():
                         for b in range(num_actions):
                             all_actions_pred_auc.append(single_action_pred[b])
                             all_actions_gt_auc.append(actions_gt[k][b])
+                    loss_actions = criterion_w(actions_pred, actions_gt)
+                    loss_reasons = criterion(reasons_pred, reasons_gt)
 
                     actions_pred = F.sigmoid(actions_pred) > 0.5
                     reasons_pred = F.sigmoid(reasons_pred) > 0.5
@@ -544,10 +562,11 @@ def main():
         print(f'AUC for each action: ', aucs)
         print(f'AUC for total: ', auc_toal)
 
+        '''
         if aucs[0] >= 0.809 and aucs[1] >= 0.816 and aucs[2] >= 0.73 and aucs[3] >= 0.718:
             model_name = "test_ori_epoch_" + str(epoch) + ".pth"
             torch.save(explanation_model.state_dict(), model_name)
-
+        '''
         # Determine the threshold that maximizes the AUC
         if explanation_model.use_edl:
             thresholds_uncertainty = []
@@ -569,11 +588,241 @@ def main():
 
         # results_df.to_csv('uncertainty_results.csv', index=False)
 
+        # For test
+        with torch.no_grad():
+            # Calculate F1 Separately
+            actions_total_f1 = []
+            reasons_total_f1 = []
+            actions_pred_f1 = [[], [], [], []]
+            actions_gt_f1 = [[], [], [], []]
+
+            # Calculate solid accuracy
+            actions_correct_images = 0
+            reasons_correct_images = 0
+            reasons_reasonable_images = 0
+            actions_total_images = 0
+            reasons_total_images = 0
+
+            # Calculate Val F1
+            all_actions_gt = []
+            all_actions_pred = []
+            all_actions_pred_auc = []
+            all_actions_gt_auc = []
+            all_reasons_gt = []
+            all_reasons_pred = []
+
+            # Calculate Val AUC
+            val_uncertainties = []
+            val_entropy = []
+            val_correctness = []
+            test_running_loss = 0.0
+
+            # Iterate through the validation data loader (batches of validation samples)
+            for idx, (inputs, actions_gt, reasons_gt, image_names) in enumerate(test_loader):
+                inputs, actions_gt, reasons_gt = inputs.to(device), actions_gt.to(device), reasons_gt.to(device)
+
+                # Forward pass the input images through the model, getting the predicted actions and reasons (logits)
+                actions_pred, reasons_pred, _ = explanation_model(inputs)
+
+                if explanation_model.use_edl:
+                    split_action_pred = torch.unbind(actions_pred, dim=1)  # tuple of 4 tensors with shape 4x2
+                    split_reason_pred = torch.unbind(reasons_pred, dim=1)  # tuple of 21 tensors with shape 4x2
+                    split_action_gt = torch.unbind(actions_gt, dim=1)  # tuple of 4 tensors with shape 4,
+                    split_reason_gt = torch.unbind(reasons_gt, dim=1)  # tuple of 4 tensors with shape 4,
+
+                    loss_actions = 0
+                    loss_reasons = 0
+
+                    for i in range(num_actions):
+                        action_pred_i = split_action_pred[i]
+                        action_gt_i = split_action_gt[i]
+                        action_gt_i = action_gt_i.to(torch.long)
+                        action_gt_i = one_hot_embedding(action_gt_i)
+                        loss_actions += criterion_edl(action_pred_i, action_gt_i.float(), epoch, 2, 10, device)
+                        # loss_actions += criterion_weighted_edl(action_pred_i, action_gt_i.float(), epoch, 2, 10, device,
+                        # actions_weights[i])
+
+                    for j in range(num_reasons):
+                        reason_pred_i = split_reason_pred[j]
+                        reason_gt_i = split_reason_gt[j]
+                        reason_gt_i = reason_gt_i.to(torch.long)
+                        reason_gt_i = one_hot_embedding(reason_gt_i)
+                        loss_reasons += criterion_edl(reason_pred_i, reason_gt_i.float(), epoch, 2, 10, device)
+                        # loss_reasons += criterion_weighted_edl(action_pred_i, action_gt_i.float(), epoch, 2, 10, device, weights)
+
+                    for k in range(len(actions_pred)):
+                        single_action_pred = actions_pred[k]
+                        single_action_pred_result = torch.argmax(actions_pred, dim=2)[k]
+                        single_model_uncertainty = [(2 / torch.sum(relu_evidence(a) + 1)).item() for a in
+                                                    single_action_pred]
+                        single_probability = torch.stack(
+                            [(relu_evidence(a) + 1) / (torch.sum(relu_evidence(a) + 1)) for a in single_action_pred])
+                        single_entropy = -torch.sum(single_probability * torch.log2(single_probability + 1e-9), dim=-1)
+                        for b in range(num_actions):
+                            val_uncertainties.append(single_model_uncertainty[b])
+                            val_entropy.append(single_entropy[b])
+                            all_actions_pred_auc.append(single_action_pred[b][1])
+                            all_actions_gt_auc.append(actions_gt[k][b])
+                            if single_action_pred_result[b].eq(actions_gt[k][b].bool()):
+                                val_correctness.append(1)
+                            else:
+                                val_correctness.append(0)
+
+                        '''
+                        sample_reason_pred = reasons_pred[0]
+                        sample_reason_uncertainty = [(2 / torch.sum(relu_evidence(b) + 1)).item() for b in
+                                                    sample_reason_pred]
+
+                        sample_action_gt = actions_gt[0].cpu().numpy().astype(int)
+                        sample_reason_gt = reasons_gt[0].cpu().numpy().astype(int)
+
+                        sample_image_name = image_names[0]
+                        '''
+                    actions_pred = torch.argmax(actions_pred, dim=2)
+                    reasons_pred = torch.argmax(reasons_pred, dim=2)
+
+                # Apply the Sigmoid activation and threshold (0.5) to the predicted action and reason logits to
+                else:
+                    for k in range(len(actions_pred)):
+                        single_action_pred = actions_pred[k]
+                        for b in range(num_actions):
+                            all_actions_pred_auc.append(single_action_pred[b])
+                            all_actions_gt_auc.append(actions_gt[k][b])
+                    loss_actions = criterion_w(actions_pred, actions_gt)
+                    loss_reasons = criterion(reasons_pred, reasons_gt)
+
+                    actions_pred = F.sigmoid(actions_pred) > 0.5
+                    reasons_pred = F.sigmoid(reasons_pred) > 0.5
+
+                loss = loss_actions + loss_reasons
+                test_running_loss += loss
+
+                all_actions_pred.append(actions_pred.cpu().numpy().astype(int))
+                all_actions_gt.append(actions_gt.cpu().numpy().astype(int))
+                all_reasons_pred.append(reasons_pred.cpu().numpy().astype(int))
+                all_reasons_gt.append(reasons_gt.cpu().numpy().astype(int))
+
+                # Calculate F1 score
+                for i in range(actions_pred.size(0)):  # Iterate over images in the batch
+                    actions_pred_binary = actions_pred[i].cpu().numpy().astype(int)
+                    actions_f1_i = f1_score(actions_gt[i].cpu().numpy(), actions_pred_binary, average='micro',
+                                            zero_division=1.0)
+                    actions_total_f1.append(actions_f1_i)
+
+                    reasons_pred_binary = reasons_pred[i].cpu().numpy().astype(int)
+                    reasons_f1_i = f1_score(reasons_gt[i].cpu().numpy(), reasons_pred_binary, average='micro',
+                                            zero_division=1.0)
+                    reasons_total_f1.append(reasons_f1_i)
+
+                    for j in range(num_actions):
+                        # action_f1_j = f1_score(actions_gt[i, j].cpu().numpy().reshape(1),actions_pred_binary[
+                        # j].reshape(1), average=None)
+                        actions_pred_f1[j].append(actions_pred_binary[j])
+                        actions_gt_f1[j].append(actions_gt[i, j].cpu().item())
+                        # actions_f1[j].append(action_f1_j)
+
+                for i in range(actions_pred.size(0)):  # Iterate over images in the batch
+                    if actions_pred[i].eq(
+                            actions_gt[i].bool()).all():  # Check if all actions are correct for the current image
+                        actions_correct_images += 1
+                actions_total_images += actions_pred.size(0)
+                actions_accuracy_images = actions_correct_images / actions_total_images
+
+                for i in range(reasons_pred.size(0)):
+                    image_reasonable = True
+                    for j in range(num_reasons):
+                        if reasons_pred[i, j] == 1:  # If the reason is present
+                            if not any([actions_pred[i, k] == 1 and relationship_matrix[k, j] == 1 for k in
+                                        range(num_actions)]):  # If there is no corresponding action
+                                image_reasonable = False
+                                break
+                    if image_reasonable:
+                        reasons_reasonable_images += 1
+
+                for i in range(reasons_pred.size(0)):  # Iterate over images in the batch
+                    if reasons_pred[i].eq(
+                            reasons_gt[i].bool()).all():  # Check if all actions are correct for the current image
+                        reasons_correct_images += 1
+                reasons_total_images += reasons_pred.size(0)
+                reasons_accuracy_images = reasons_correct_images / reasons_total_images
+                reasons_reasonable_rate = reasons_reasonable_images / reasons_total_images
+
+            # Calculate loss
+        test_loss = test_running_loss / len(test_loader)
+        print(f"Epoch {epoch + 1}, Test Loss: {test_loss:.4f}")
+
+        print("Exactly Same Answer Rate: ")
+        print(f"Action accuracy (per image): {actions_accuracy_images * 100:.2f}%")
+        print(f"Reason accuracy (per image): {reasons_accuracy_images * 100:.2f}%")
+        print(f"Reason reasonable rate (per image): {reasons_reasonable_rate * 100:.2f}%")
+
+        # Concatenate all the batch-wise true labels and predictions
+        all_actions_pred = np.concatenate(all_actions_pred, axis=0)
+        all_actions_gt = np.concatenate(all_actions_gt, axis=0)
+        all_reasons_pred = np.concatenate(all_reasons_pred, axis=0)
+        all_reasons_gt = np.concatenate(all_reasons_gt, axis=0)
+
+        # Now calculate the F1 score over the entire dataset
+        f1_actions_score_overall = f1_score(all_actions_gt, all_actions_pred, average='samples')
+        f1_reasons_score_overall = f1_score(all_reasons_gt, all_reasons_pred, average='samples')
+        f1_actions_score_macro = f1_score(all_actions_gt, all_actions_pred, average='macro')
+        f1_reasons_score_macro = f1_score(all_reasons_gt, all_reasons_pred, average='macro')
+        f1_actions_score_micro = f1_score(all_actions_gt, all_actions_pred, average='micro')
+        f1_reasons_score_micro = f1_score(all_reasons_gt, all_reasons_pred, average='micro')
+        f1_actions_score = f1_score(all_actions_gt, all_actions_pred, average=None)
+        # f1_reasons_score = f1_score(all_reasons_gt, all_reasons_pred, average=None)
+        print("F1 score")
+        print(f'Actions Total F1: {f1_actions_score_overall:.4f}')
+        print(f'Reasons Total F1: {f1_reasons_score_overall:.4f}')
+        print(f'Actions Macro F1: {f1_actions_score_macro:.4f}')
+        print(f'Reasons Macro F1: {f1_reasons_score_macro:.4f}')
+        print(f'Actions micro F1: {f1_actions_score_micro:.4f}')
+        print(f'Reasons micro F1: {f1_reasons_score_micro:.4f}')
+        print(f'Actions F1: ', f1_actions_score)
+
+        # Calculate the AUCs
+        aucs = []
+        all_actions_pred_auc = [tensor.cpu().numpy() for tensor in all_actions_pred_auc]
+        all_actions_gt_auc = [tensor.cpu().numpy() for tensor in all_actions_gt_auc]
+        val_entropy = [tensor.cpu().numpy() for tensor in val_entropy]
+        for a in range(num_actions):
+            # auc = roc_auc_score(val_correctness[a::num_actions], val_uncertainties[a::num_actions])
+            auc = roc_auc_score(all_actions_gt_auc[a::num_actions], all_actions_pred_auc[a::num_actions])
+            aucs.append(auc)
+        auc_toal = roc_auc_score(all_actions_gt_auc, all_actions_pred_auc)
+        print("AUC Score")
+        print(f'AUC for each action: ', aucs)
+        print(f'AUC for total: ', auc_toal)
+
+        '''
+        if aucs[0] >= 0.809 and aucs[1] >= 0.816 and aucs[2] >= 0.73 and aucs[3] >= 0.718:
+            model_name = "test_ori_epoch_" + str(epoch) + ".pth"
+            torch.save(explanation_model.state_dict(), model_name)
+        '''
+        # Determine the threshold that maximizes the AUC
+        if explanation_model.use_edl:
+            thresholds_uncertainty = []
+            thresholds_entropy = []
+            for a in range(num_actions):
+                fpr, tpr, thrs = roc_curve(val_correctness[a::num_actions], val_uncertainties[a::num_actions])
+                gmeans = np.sqrt(tpr * (1 - fpr))  # geometric mean of true positive rate and true negative rate
+                idx = np.argmax(gmeans)  # Index of maximum gmean
+                thresholds_uncertainty.append(thrs[idx])
+
+            for a in range(num_actions):
+                fpr, tpr, thrs = roc_curve(val_correctness[a::num_actions], val_entropy[a::num_actions])
+                gmeans = np.sqrt(tpr * (1 - fpr))  # geometric mean of true positive rate and true negative rate
+                idx = np.argmax(gmeans)  # Index of maximum gmean
+                thresholds_entropy.append(thrs[idx])
+            print("Threshold")
+            print(f'Threshold for model uncertainty: ', thresholds_uncertainty)
+            print(f'Threshold entropy: ', thresholds_entropy)
+
         # Set the model back to training mode
         explanation_model.train()
         scheduler.step()
 
-    torch.save(explanation_model.state_dict(), 'test_edl_sep_model.pth')
+    torch.save(explanation_model.state_dict(), 'edl_base_newDataset_model.pth')
 
 
 if __name__ == '__main__':

@@ -33,63 +33,70 @@ class ExplanationModel(nn.Module):
         self.no_object_detected_tensor = torch.zeros((10, 256, 7, 7)).to(torch.device("cuda"))
 
         # Use the average pool to downgrade dimension
+        self.conv_glob1 = nn.Conv2d(2048, 1024, 3, padding=1)
+        self.relu_glob1 = nn.ReLU(inplace=True)
+        self.conv_glob2 = nn.Conv2d(1024, 512, 3, padding=1)
+        self.relu_glob2 = nn.ReLU(inplace=True)
+        self.conv_glob3 = nn.Conv2d(512, 256, 3, padding=1)
+        self.relu_glob3 = nn.ReLU(inplace=True)
         self.global_avg_pool = nn.AdaptiveAvgPool2d((1, 1))
 
         # Use the selector to calculate the scores for each combined features
 
         self.selector = nn.Sequential(
-            nn.Conv2d(2304, 64, kernel_size=3, padding=1),
+            nn.Conv2d(512, 64, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(64, 32, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(32, 1, kernel_size=1),
         )
-
-        # Seperate selector
         '''
+        # Seperate selector
+
         self.selector_1 = nn.Sequential(
-            nn.Conv2d(2304, 64, kernel_size=3, padding=1),
+            nn.Conv2d(512, 64, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(64, 32, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(32, 1, kernel_size=1),
         )
         self.selector_2 = nn.Sequential(
-            nn.Conv2d(2304, 64, kernel_size=3, padding=1),
+            nn.Conv2d(512, 64, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(64, 32, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(32, 1, kernel_size=1),
         )
         self.selector_3 = nn.Sequential(
-            nn.Conv2d(2304, 64, kernel_size=3, padding=1),
+            nn.Conv2d(512, 64, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(64, 32, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(32, 1, kernel_size=1),
         )
         self.selector_4 = nn.Sequential(
-            nn.Conv2d(2304, 64, kernel_size=3, padding=1),
+            nn.Conv2d(512, 64, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(64, 32, kernel_size=3, padding=1),
             nn.ReLU(),
             nn.Conv2d(32, 1, kernel_size=1),
         )
-
         '''
+
 
         # Prevent overfit
         self.dropout = nn.Dropout(p=0.2)
 
+        '''
         # Direct connected
         self.action_fc = nn.Linear(2304, num_actions)
         self.reason_fc = nn.Linear(2304, num_reasons)
         self.action_fc_edl = nn.Linear(2304, num_actions*2)
         self.reason_fc_edl = nn.Linear(2304, num_reasons*2)
-
+        '''
 
         # Indirect connected
-        self.fc1 = nn.Linear(2048 + 256, 256)
+        self.fc1 = nn.Linear(256 + 256, 256)
         self.relu1 = nn.ReLU(inplace=True)
 
         self.fc2 = nn.Linear(256 * self.select_num, 64)
@@ -99,7 +106,6 @@ class ExplanationModel(nn.Module):
         self.fc3_edl = nn.Linear(64, num_actions*2)
         self.fcr_edl = nn.Linear(256 * self.select_num, num_reasons*2)
         '''
-
         #Seperate network for actions
         self.fc1_1 = nn.Linear(2048 + 256, 256)
         self.relu1_1 = nn.ReLU(inplace=True)
@@ -124,15 +130,16 @@ class ExplanationModel(nn.Module):
         self.fc2_4 = nn.Linear(256 * self.select_num, 64)
         self.relu2_4 = nn.ReLU(inplace=True)
         self.fc3_edl_4 = nn.Linear(64, 2)
+        '''
 
         #Seperate network for reasons
-        self.fcr_edl_1 = nn.Linear(256 * self.select_num, 6)
-        self.fcr_edl_2 = nn.Linear(256 * self.select_num, 12)
-        self.fcr_edl_3 = nn.Linear(256 * self.select_num, 6)
-        self.fcr_edl_4 = nn.Linear(256 * self.select_num, 6)
-        self.fcr_edl_5 = nn.Linear(256 * self.select_num, 6)
-        self.fcr_edl_6 = nn.Linear(256 * self.select_num, 6)
-        '''
+        self.fcr_edl_1 = nn.Linear(256 * self.select_num, num_reasons*2)
+        self.fcr_edl_2 = nn.Linear(256 * self.select_num, num_reasons*2)
+        self.fcr_edl_3 = nn.Linear(256 * self.select_num, num_reasons*2)
+        self.fcr_edl_4 = nn.Linear(256 * self.select_num, num_reasons*2)
+        self.fcr_edl_5 = nn.Linear(256 * self.select_num, num_reasons*2)
+        self.fcr_edl_6 = nn.Linear(256 * self.select_num, num_reasons*2)
+
         '''
         # Direct connected
         self.fc = nn.Linear(2304 * 7 * 7, 2048)
@@ -143,7 +150,10 @@ class ExplanationModel(nn.Module):
 
         # Get the global feature from the last layer (e.g., 'p5')
         global_features = self.backbone_before_fpn(x)['res5']
-        global_features_downsampled = F.adaptive_avg_pool2d(global_features, output_size=(7, 7))
+        glob = self.relu_glob1(self.conv_glob1(global_features))
+        glob = self.relu_glob2(self.conv_glob2(glob))
+        glob = self.relu_glob3(self.conv_glob3(glob))
+        global_features_downsampled = F.adaptive_avg_pool2d(glob, output_size=(7, 7))
 
         # Get the proposals
         image_list = ImageList(x, [(x.shape[-2], x.shape[-1])] * x.shape[0])
@@ -158,7 +168,6 @@ class ExplanationModel(nn.Module):
         boxes_per_image = [instances_i.pred_boxes for instances_i in instances]
         feature_map = [raw_features[f] for f in self.roi_heads.in_features]
         object_features = roi_pool(feature_map, boxes_per_image)  # Notice that boxes is enclosed in a list
-
         # Separate object features for each image
         object_features_per_image = []
         start_idx = 0
@@ -218,6 +227,7 @@ class ExplanationModel(nn.Module):
             scores = F.softmax(pooled_output.squeeze(1), dim=0)
             attention_weights_per_image.append(scores)
 
+        
         # Compute the weighted average of object features based on attention weights
         weighted_features_per_image = []
         for i, combined_features_i in enumerate(combined_features_per_image):
@@ -225,7 +235,7 @@ class ExplanationModel(nn.Module):
             weighted_features_i = attention_weights_i * combined_features_i  # Element-wise multiplication
             weighted_average_i = torch.sum(weighted_features_i, dim=0, keepdim=True)  # Shape: (1, 2304, 7, 7)
             weighted_features_per_image.append(weighted_average_i)
-
+        
         selected_features_per_image = []
         for i, combined_features_i in enumerate(combined_features_per_image):
             attention_scores_i = attention_weights_per_image[i]
@@ -246,19 +256,16 @@ class ExplanationModel(nn.Module):
             final_feature = torch.stack(selected_features_per_image)
             final_feature = self.global_avg_pool(final_feature)
             final_feature = torch.squeeze(final_feature)
-            final_feature = final_feature.view(-1, 2304)
+            final_feature = final_feature.view(-1, 512)
             final_feature = self.dropout(self.relu1(self.fc1(final_feature)))
             final_feature = final_feature.view(-1, 10, 256)
             final_feature = final_feature.view(x.shape[0], -1)  # reshape to (batch_size, 2560)
-            #final_feature_1 = final_feature
-            #final_feature_2 = final_feature
-            #final_feature_3 = final_feature
-            #final_feature_4 = final_feature
+
             '''
             final_feature_1 = torch.stack(selected_features_per_action[0])
             final_feature_1 = self.global_avg_pool(final_feature_1)
             final_feature_1 = torch.squeeze(final_feature_1)
-            final_feature_1 = final_feature_1.view(-1, 2304)
+            final_feature_1 = final_feature_1.view(-1, 512)
             final_feature_1 = self.dropout(self.relu1(self.fc1(final_feature_1)))
             final_feature_1 = final_feature_1.view(-1, 10, 256)
             final_feature_1 = final_feature_1.view(x.shape[0], -1)  # reshape to (batch_size, 2560)
@@ -266,7 +273,7 @@ class ExplanationModel(nn.Module):
             final_feature_2 = torch.stack(selected_features_per_action[1])
             final_feature_2 = self.global_avg_pool(final_feature_2)
             final_feature_2 = torch.squeeze(final_feature_2)
-            final_feature_2 = final_feature_2.view(-1, 2304)
+            final_feature_2 = final_feature_2.view(-1, 512)
             final_feature_2 = self.dropout(self.relu1(self.fc1(final_feature_2)))
             final_feature_2 = final_feature_2.view(-1, 10, 256)
             final_feature_2 = final_feature_2.view(x.shape[0], -1)  # reshape to (batch_size, 2560)
@@ -274,7 +281,7 @@ class ExplanationModel(nn.Module):
             final_feature_3 = torch.stack(selected_features_per_action[2])
             final_feature_3 = self.global_avg_pool(final_feature_3)
             final_feature_3 = torch.squeeze(final_feature_3)
-            final_feature_3 = final_feature_3.view(-1, 2304)
+            final_feature_3 = final_feature_3.view(-1, 512)
             final_feature_3 = self.dropout(self.relu1(self.fc1(final_feature_3)))
             final_feature_3 = final_feature_3.view(-1, 10, 256)
             final_feature_3 = final_feature_3.view(x.shape[0], -1)  # reshape to (batch_size, 2560)
@@ -282,38 +289,52 @@ class ExplanationModel(nn.Module):
             final_feature_4 = torch.stack(selected_features_per_action[3])
             final_feature_4 = self.global_avg_pool(final_feature_4)
             final_feature_4 = torch.squeeze(final_feature_4)
-            final_feature_4 = final_feature_4.view(-1, 2304)
+            final_feature_4 = final_feature_4.view(-1, 512)
             final_feature_4 = self.dropout(self.relu1(self.fc1(final_feature_4)))
             final_feature_4 = final_feature_4.view(-1, 10, 256)
             final_feature_4 = final_feature_4.view(x.shape[0], -1)  # reshape to (batch_size, 2560)
             '''
             if self.use_edl:
+
                 reasons = self.fcr_edl(final_feature).view(x.shape[0], self.num_reasons, 2)
                 final_feature = self.dropout(self.relu2(self.fc2(final_feature)))
-                actions = self.dropout(self.fc3_edl(final_featur                                                                                                                                                                        e)).view(x.shape[0], self.num_actions, 2)
+                actions = self.dropout(self.fc3_edl(final_feature).view(x.shape[0], self.num_actions, 2))
 
                 '''
-                reason_1 = self.fcr_edl_1(final_feature_1).view(x.shape[0], 3, 2)
-                reason_2 = self.fcr_edl_2(final_feature_2).view(x.shape[0], 6, 2)
-                reason_3 = self.fcr_edl_3(final_feature_3).view(x.shape[0], 3, 2)
-                reason_4 = self.fcr_edl_4(final_feature_4).view(x.shape[0], 3, 2)
-                reason_5 = self.fcr_edl_5(final_feature_3).view(x.shape[0], 3, 2)
-                reason_6 = self.fcr_edl_6(final_feature_4).view(x.shape[0], 3, 2)
+                reason_1 = self.fcr_edl_1(final_feature_1).view(x.shape[0], self.num_reasons, 2)
+                reason_2 = self.fcr_edl_2(final_feature_2).view(x.shape[0], self.num_reasons, 2)
+                reason_3 = self.fcr_edl_3(final_feature_3).view(x.shape[0], self.num_reasons, 2)
+                reason_4 = self.fcr_edl_4(final_feature_4).view(x.shape[0], self.num_reasons, 2)
+                reason_5 = self.fcr_edl_5(final_feature_3).view(x.shape[0], self.num_reasons, 2)
+                reason_6 = self.fcr_edl_6(final_feature_4).view(x.shape[0], self.num_reasons, 2)
 
-                final_feature_1 = self.dropout(self.relu2_1(self.fc2_1(final_feature_1)))
-                action_1 = self.dropout(self.fc3_edl_1(final_feature_1)).view(x.shape[0], 1, 2)
+                final_feature_1 = self.dropout(self.relu2(self.fc2(final_feature_1)))
+                action_1 = self.dropout(self.fc3_edl(final_feature_1)).view(x.shape[0], self.num_actions, 2)
 
-                final_feature_2 = self.dropout(self.relu2_2(self.fc2_2(final_feature_2)))
-                action_2 = self.dropout(self.fc3_edl_2(final_feature_2)).view(x.shape[0], 1, 2)
+                final_feature_2 = self.dropout(self.relu2(self.fc2(final_feature_2)))
+                action_2 = self.dropout(self.fc3_edl(final_feature_2)).view(x.shape[0], self.num_actions, 2)
 
-                final_feature_3 = self.dropout(self.relu2_3(self.fc2_3(final_feature_3)))
-                action_3 = self.dropout(self.fc3_edl_3(final_feature_3)).view(x.shape[0], 1, 2)
+                final_feature_3 = self.dropout(self.relu2(self.fc2(final_feature_3)))
+                action_3 = self.dropout(self.fc3_edl(final_feature_3)).view(x.shape[0], self.num_actions, 2)
 
-                final_feature_4 = self.dropout(self.relu2_4(self.fc2_4(final_feature_4)))
-                action_4 = self.dropout(self.fc3_edl_4(final_feature_4)).view(x.shape[0], 1, 2)
+                final_feature_4 = self.dropout(self.relu2(self.fc2(final_feature_4)))
+                action_4 = self.dropout(self.fc3_edl(final_feature_4)).view(x.shape[0], self.num_actions, 2)
 
-                actions = torch.cat((action_1, action_2, action_3, action_4), dim=1)
-                reasons = torch.cat((reason_1, reason_2, reason_3, reason_4, reason_5, reason_6), dim=1)
+                #actions = torch.cat((action_1, action_2, action_3, action_4), dim=1)
+                #reasons = torch.cat((reason_1, reason_2, reason_3, reason_4, reason_5, reason_6), dim=1)
+                # Select the relevant labels from each output
+                a1 = action_1[:, 0, :].unsqueeze(1)
+                a2 = action_2[:, 1, :].unsqueeze(1)
+                a3 = action_3[:, 2, :].unsqueeze(1)
+                a4 = action_4[:, 3, :].unsqueeze(1)
+                # Concatenate along the second dimension
+                actions = torch.cat([a1, a2, a3, a4], dim=1)
+
+                result_outputs = [reason_1, reason_2, reason_3, reason_4, reason_5, reason_6]
+                result_indices = [(1, 3), (4, 9), (10, 12), (13, 15), (16, 18), (19, 21)]
+                result_indices = [(start - 1, end) for start, end in result_indices]
+                result_slices = [output[:, start:end, :] for (output, (start, end)) in zip(result_outputs, result_indices)]
+                reasons = torch.cat(result_slices, dim=1)
                 '''
                 return actions, reasons, None
 
